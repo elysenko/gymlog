@@ -43,6 +43,12 @@ def main() -> None:
                     name=u["name"],
                 )
                 db.add(existing)
+            else:
+                # Re-assert the password + role on every seed run so the stored hash can
+                # never drift from the SEED_CRED line the deploy records (idempotent upsert).
+                existing.password_hash = hash_password(u["password"])
+                existing.role = u["role"]
+                existing.name = u["name"]
             users_by_email[u["email"]] = existing
             print(f"SEED_CRED {u['role']} {u['email']} {u['password']}")
             creds.append({"role": u["role"], "email": u["email"], "password": u["password"]})
