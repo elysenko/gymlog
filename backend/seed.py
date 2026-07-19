@@ -7,11 +7,20 @@ from sqlalchemy import select
 
 from app.auth import hash_password
 from app.database import Base, SessionLocal, engine
-from app.models import User
+from app.models import Exercise, User
 
 DEMO_USERS = [
-    {"role": "ADMIN", "email": "admin@example.com", "password": "Admin123!", "name": "Demo Admin"},
-    {"role": "USER", "email": "user@example.com", "password": "User123!", "name": "Demo User"},
+    {"role": "ADMIN", "email": "admin@gymlog.dev", "password": "Password123!", "name": "Demo Admin"},
+    {"role": "USER", "email": "user@gymlog.dev", "password": "Password123!", "name": "Demo User"},
+]
+
+# Starter exercises seeded for the demo USER account.
+STARTER_EXERCISES = [
+    {"name": "Barbell Squat", "muscle_group": "legs", "equipment": "barbell"},
+    {"name": "Bench Press", "muscle_group": "chest", "equipment": "barbell"},
+    {"name": "Deadlift", "muscle_group": "back", "equipment": "barbell"},
+    {"name": "Overhead Press", "muscle_group": "shoulders", "equipment": "barbell"},
+    {"name": "Pull Up", "muscle_group": "back", "equipment": "bodyweight"},
 ]
 
 
@@ -19,12 +28,40 @@ def main() -> None:
     Base.metadata.create_all(bind=engine)
     creds = []
     with SessionLocal() as db:
+        users_by_email: dict[str, User] = {}
         for u in DEMO_USERS:
             existing = db.execute(select(User).where(User.email == u["email"])).scalar_one_or_none()
             if existing is None:
-                db.add(User(email=u["email"], password_hash=hash_password(u["password"]), role=u["role"], name=u["name"]))
+                existing = User(
+                    email=u["email"],
+                    password_hash=hash_password(u["password"]),
+                    role=u["role"],
+                    name=u["name"],
+                )
+                db.add(existing)
+                db.flush()
+            users_by_email[u["email"]] = existing
             print(f"SEED_CRED {u['role']} {u['email']} {u['password']}")
             creds.append({"role": u["role"], "email": u["email"], "password": u["password"]})
+
+        # Idempotently seed starter exercises for the demo USER (by name).
+        demo_user = users_by_email.get("user@gymlog.dev")
+        if demo_user is not None:
+            for ex in STARTER_EXERCISES:
+                exists = db.execute(
+                    select(Exercise).where(
+                        Exercise.user_id == demo_user.id, Exercise.name == ex["name"]
+                    )
+                ).scalar_one_or_none()
+                if exists is None:
+                    db.add(
+                        Exercise(
+                            user_id=demo_user.id,
+                            name=ex["name"],
+                            muscle_group=ex["muscle_group"],
+                            equipment=ex["equipment"],
+                        )
+                    )
         db.commit()
     print(f"SEED_CREDS_JSON {json.dumps(creds)}")
 

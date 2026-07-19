@@ -121,3 +121,19 @@ class SetEntry(Base):
     weight: Mapped[float] = mapped_column(Float)
 
     session_exercise: Mapped["SessionExercise"] = relationship(back_populates="sets")
+
+
+class SystemSetting(Base):
+    """Admin-settings backing store for provisioned service credentials/config.
+
+    Read priority (see app.config_resolver): env var wins; falls back to the
+    row here; null when neither is set. Written via PATCH /api/admin/settings.
+    """
+
+    __tablename__ = "system_settings"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value: Mapped[str] = mapped_column(String(2048), default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
