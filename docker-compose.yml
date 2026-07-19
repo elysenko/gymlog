@@ -1,0 +1,48 @@
+# Local dev parity for GymLog: Postgres + FastAPI backend + nginx-served SPA.
+# Mirrors the deployed two-service colossus.yaml topology (backend :3000, web :80).
+#   docker compose up --build
+#   web UI  -> http://localhost:8080  (proxies /api to backend)
+#   backend -> http://localhost:3000/api/health
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gymlog
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gymlog"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/gymlog
+      JWT_SECRET: dev-secret-change-me
+      ENV: development
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

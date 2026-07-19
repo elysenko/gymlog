@@ -13,7 +13,22 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import User
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me")
+_DEV_SECRET = "dev-secret-change-me"
+_ENV = (os.environ.get("ENV") or os.environ.get("ENVIRONMENT") or "development").lower()
+_IS_PROD = _ENV in {"prod", "production"}
+
+JWT_SECRET = os.environ.get("JWT_SECRET")
+if not JWT_SECRET:
+    if _IS_PROD:
+        # Per the plan's risk note: a real deployment MUST set JWT_SECRET. Fail
+        # fast rather than sign tokens with a well-known dev secret in production.
+        raise RuntimeError(
+            "JWT_SECRET is required in production (ENV/ENVIRONMENT=production) "
+            "but is not set. Refusing to start."
+        )
+    # Local/dev convenience only.
+    JWT_SECRET = _DEV_SECRET
+
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _bearer = HTTPBearer(auto_error=False)
 

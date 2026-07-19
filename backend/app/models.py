@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date as date_type
 from datetime import datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -43,16 +43,18 @@ class Exercise(Base):
     """A user-scoped entry in a personal exercise library."""
 
     __tablename__ = "exercises"
+    # Compound index for user-scoped muscle-group filtering (GET /api/exercises?muscleGroup=).
+    __table_args__ = (Index("ix_exercises_user_muscle", "user_id", "muscle_group"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
+        ForeignKey("users.id", ondelete="CASCADE")
     )
     name: Mapped[str] = mapped_column(String(255))
     # Free strings with suggested enums:
     #   muscle_group: legs | chest | back | shoulders | arms | core
     #   equipment:    barbell | dumbbell | machine | bodyweight | cable
-    muscle_group: Mapped[str] = mapped_column(String(64), index=True)
+    muscle_group: Mapped[str] = mapped_column(String(64))
     equipment: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
