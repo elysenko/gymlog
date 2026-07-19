@@ -31,15 +31,23 @@ def main() -> None:
         users_by_email: dict[str, User] = {}
         for u in DEMO_USERS:
             existing = db.execute(select(User).where(User.email == u["email"])).scalar_one_or_none()
+            # Re-assert the password on EVERY seed run (idempotent) so the stored
+            # hash can never drift from the SEED_CRED the deploy records. Also
+            # re-assert role/name in case an earlier run seeded them differently.
+            password_hash = hash_password(u["password"])
             if existing is None:
                 existing = User(
                     email=u["email"],
-                    password_hash=hash_password(u["password"]),
+                    password_hash=password_hash,
                     role=u["role"],
                     name=u["name"],
                 )
                 db.add(existing)
                 db.flush()
+            else:
+                existing.password_hash = password_hash
+                existing.role = u["role"]
+                existing.name = u["name"]
             users_by_email[u["email"]] = existing
             print(f"SEED_CRED {u['role']} {u['email']} {u['password']}")
             creds.append({"role": u["role"], "email": u["email"], "password": u["password"]})
