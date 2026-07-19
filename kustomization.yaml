@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: colossus-gymlog
+namespace: colossus-gymlog-staging
 resources:
   - k8s/deployment.yaml
   - k8s/service.yaml
   - k8s/ingress.yaml
 images:
-  - name: ubuntu:30500/gymlog
-    digest: sha256:c769154353ce92aae11e056f33681255e4e54219cbb6896e86c28322ea73963b
+  - name: ubuntu:30500/gymlog-staging
+    digest: sha256:cb29be9af3685172f55f1928f416dcc43ae89cf446024f1f78ac624753ec3520
 # Redeploy:  kubectl apply -k . (re-applies this exact image)
 # Rebuild:   re-trigger the deploy pipeline for branch main in Colossus
