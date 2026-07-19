@@ -48,3 +48,18 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="Unknown user")
     return user
+
+
+def require_role(*roles: str):
+    """Dependency factory: 403 unless the authenticated user has one of `roles`."""
+
+    def _dep(user: User = Depends(get_current_user)) -> User:
+        if user.role not in roles:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return user
+
+    return _dep
+
+
+# Convenience dependency for ADMIN-only routes.
+require_admin = require_role("ADMIN")

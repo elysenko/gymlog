@@ -1,36 +1,31 @@
 """FastAPI app entry. Serve contract: uvicorn on PORT=3000 behind the nginx /api proxy
 (web/nginx.conf strips nothing — all routes here are mounted under /api). Keep
-GET /api/health intact: the platform's backend reachability probe depends on it."""
-from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+GET /api/health intact: the platform's backend reachability probe depends on it.
 
-from .auth import get_current_user, sign_token, verify_password
-from .database import get_db
-from .models import User
+Routes are split into routers (app/routers/*) as the app grew: auth, exercises,
+sessions, records, admin users, and health. Pydantic schemas enforce request
+validation (the class-validator/ValidationPipe equivalent for this stack).
+"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .routers import auth, exercises, health, records, sessions, users
 
 app = FastAPI(title="app-backend", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
+# Same-origin in production (nginx proxies /api). CORS stays permissive so the vite
+# dev-server and any preview host can call the API directly.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/api/health")
-def health() -> dict:
-    return {"status": "ok"}
-
-
-class LoginBody(BaseModel):
-    email: str
-    password: str
-
-
-@app.post("/api/auth/login")
-def login(body: LoginBody, db: Session = Depends(get_db)) -> dict:
-    user = db.execute(select(User).where(User.email == body.email)).scalar_one_or_none()
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"token": sign_token(user), "user": {"id": user.id, "email": user.email, "role": user.role, "name": user.name}}
-
-
-@app.get("/api/auth/me")
-def me(user: User = Depends(get_current_user)) -> dict:
-    return {"id": user.id, "email": user.email, "role": user.role, "name": user.name}
+app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(exercises.router)
+app.include_router(sessions.router)
+app.include_router(records.router)
+app.include_router(users.router)
