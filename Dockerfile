@@ -1,28 +1,44 @@
 # syntax=docker/dockerfile:1
-FROM nginx:1.27-alpine
+# Combined nginx + supervisord container: React/Vite SPA served by nginx,
+# FastAPI backend on 127.0.0.1:3000, nginx proxies /api/ → backend.
 
-# Placeholder content for an empty/template repository.
-# Replace this file when the application code is added.
-RUN echo '<!doctype html><html><head><meta charset="utf-8"><title>gymlog</title>' \
-    '<style>body{font-family:system-ui,sans-serif;max-width:640px;margin:4rem auto;padding:0 1rem;color:#222}' \
-    'h1{margin-bottom:.25rem}code{background:#f4f4f4;padding:.15rem .35rem;border-radius:4px}</style></head>' \
-    '<body><h1>gymlog</h1><p>This deployment is live.</p>' \
-    '<p>The <code>gymlog</code> repository does not yet contain application code — this is a placeholder page served by nginx.</p>' \
-    '<p>Push a Dockerfile or source code and re-deploy to replace this page.</p></body></html>' \
-    > /usr/share/nginx/html/index.html
+# ---- Stage 1: build the React/Vite frontend ----
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund --loglevel=error \
+ || npm install --no-audit --no-fund --loglevel=error
+COPY web/ ./
+RUN npx vite build
 
-# Minimal nginx config: SPA-friendly try_files with a static-asset block.
-RUN printf '%s\n' \
-  'server {' \
-  '    listen 80;' \
-  '    root /usr/share/nginx/html;' \
-  '    location ~* \.(js|css|ico|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot|map|webp)$ {' \
-  '        try_files $uri =404;' \
-  '    }' \
-  '    location / {' \
-  '        try_files $uri $uri/ /index.html;' \
-  '    }' \
-  '}' > /etc/nginx/conf.d/default.conf
+# ---- Stage 2: runtime image with nginx + python backend + supervisord ----
+FROM python:3.12-slim AS runtime
+
+# Install nginx and supervisord
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends nginx supervisor \
+ && rm -rf /var/lib/apt/lists/*
+
+# ---- Backend: install Python deps and copy source ----
+WORKDIR /app/backend
+COPY backend/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ ./
+
+# ---- Frontend: copy built assets ----
+COPY --from=frontend-builder /app/web/dist /usr/share/nginx/html
+
+# ---- nginx config ----
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+# ---- supervisord config ----
+COPY supervisord.conf /etc/supervisord.conf
+
+ENV PYTHONUNBUFFERED=1 \
+    PORT=3000 \
+    ENV=production
 
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
